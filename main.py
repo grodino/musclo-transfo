@@ -9,15 +9,16 @@ __maintainer__ = "Augustin GODINOT"
 __email__ = "augustin.godinot@ens-paris-saclay.fr"
 __status__ = "Education"
 
-
 from inductance import Inductance
-from scipy.optimize import differential_evolution
+
+import numpy as np
+from scipy.optimize import minimize
 
 parametres = {
-    "hauteur": 0.1, # (en m)
+    "hauteur": 0.1*10, # (en m)
     "largeur": 0.1, # (en m)
     "profondeur": 0.06, # (en m)
-    "largeur_fer": 0.026, # (en m)
+    "largeur_dent": 0.026, # (en m)
     "hauteur_entrefer": 0.006 # (en m)
 }
 contraintes = {
@@ -31,37 +32,58 @@ variables = {
     "pertes_fer": 0 # (en J)
 }
 
-# TODO : dans inducance.py continuer le calcul des pertes fer (Total Core Loss)
-# pour prendre en compte les courbes constructeur
+def critere(parametres):
+    """ Fonction coût considérée pour le problème """
 
-A=Inductance({
-    "hauteur": parametres['hauteur'], 
-    "largeur": parametres['largeur'],
-    "l_active": parametres['profondeur'], 
-    "entrefer": parametres['hauteur_entrefer'], 
-    "l_dent":parametres['largeur_fer'],
-    "k_b":0.4, 
-    "j_max": contraintes['j_max'], 
-    "i_max": contraintes['courant_max']
-})
-A.creation_FEMM()
-A.creation_geometrie()
-A.fit_zoom()
-A.affectation_materiaux()
-A.conditions_limites()
-A.sauvegarde_simulation()
-A.maillage()
-A.simulation()
+    print(parametres)
 
-print("L'energie de l'inductance est de {0:.3f} J".format(A.calcul_energie()))
-print("Le volume externe de l'inductance est de {0:.6f} m^3".format(A.calcul_volume_externe()))
-print("Le volume de fer de l'inductance est de {0:.6f} m^3".format(A.calcul_volume_fer()))
-print("Le volume de cuivre de l'inductance est de {0:.6f} m^3".format(A.calcul_volume_cuivre()))
-print("La masse de fer de l'inductance est de {0:.3f} kg".format(A.calcul_masse_fer()))
-print("La masse de cuivre de l'inductance est de {0:.3f} kg".format(A.calcul_masse_cuivre()))
-print("Les pertes Joule sont de {0:.1f} W".format(A.calcul_pertes_joule()))
-#("Les pertes fer sont de {0:.1f} W".format(A.calcul_pertes_fer()))
+    A=Inductance({
+        "hauteur": parametres[0], 
+        "largeur": parametres[1],
+        "l_active": parametres[2], 
+        "entrefer": parametres[3], 
+        "l_dent":parametres[4],
+        "k_b":0.4, 
+        "j_max": contraintes['j_max'], 
+        "i_max": contraintes['courant_max']
+    })
+    A.creation_FEMM()
+    A.creation_geometrie()
+    A.fit_zoom()
+    A.affectation_materiaux()
+    A.conditions_limites()
+    A.sauvegarde_simulation()
+    A.maillage()
+    A.simulation()
+    A.fermeture_simulation()
 
-# Fermeture de FEMM (à commenter si garder la fenêtre ouverte)
-input()
-A.fermeture_simulation()
+    masse =  A.masse_totale
+    print(masse)
+
+    return masse
+
+
+parametres_array = np.array([
+    0.1*10,
+    0.1,
+    0.06,
+    0.026,
+    0.006
+])
+limites = [(0.05, None), (0.05, None), (0.01, None), (0.01, None), (0.001, None)]
+result = minimize(critere, parametres_array, method='TNC', bounds=limites)
+print(result)
+
+
+# print("L'energie de l'inductance est de {0:.3f} J".format(A.energie_stockee))
+# print("Le volume externe de l'inductance est de {0:.6f} m^3".format(A.volume_externe))
+# print("Le volume de fer de l'inductance est de {0:.6f} m^3".format(A.volume_fer))
+# print("Le volume de cuivre de l'inductance est de {0:.6f} m^3".format(A.volume_cuivre))
+# print("La masse de fer de l'inductance est de {0:.3f} kg".format(A.masse_fer))
+# print("La masse de cuivre de l'inductance est de {0:.3f} kg".format(A.masse_cuivre))
+# print("Les pertes Joule sont de {0:.1f} W".format(A.pertes_joule))
+# print("Les pertes fer sont de {0:.1f} W".format(A.pertes_fer))
+
+# # Fermeture de FEMM (à commenter si garder la fenêtre ouverte)
+# input()
+# A.fermeture_simulation()

@@ -18,6 +18,7 @@ __status__ = "Education"
 
 import femm
 import numpy as np
+from scipy.interpolate import interp1d
 
 
 class Inductance:
@@ -73,8 +74,8 @@ class Inductance:
     def creation_FEMM(self):
         """Méthode permettant de générer une simulation FEMM"""
         
-        # Permet de lancer le logiciel FEMM.
-        femm.openfemm()
+        # Permet de lancer le logiciel FEMM. (1 = pas d'affichage graphique)
+        femm.openfemm(1)
 
         # Création d'un problème de magnétostatique ( = 0 ).
         femm.newdocument(0)
@@ -153,7 +154,6 @@ class Inductance:
                            self.l_dent/2, -self.entrefer/2)
         femm.mi_addsegment(-self.l_dent/2, self.entrefer/2,
                            -self.l_dent/2, -self.entrefer/2)      
-   
 
     def affectation_materiaux(self):
         """Méthode permettant d'attribuer la propriété des matériaux"""
@@ -196,18 +196,23 @@ class Inductance:
             26.5, 37.8, 52.4, 71.9, 99.3, 136, 176, 279, 659, 1084, 1718, 2577, 
             3670
         ]
-        
-        # Affectation des points de la courbe
+         # Affectation des points de la courbe
         for n in range(0,len(bdata)):
             femm.mi_addbhpoint('Iron', bdata[n], hdata[n])
+
+        # Les points de la courbe Pertes fer = f(B)
+        pdata = [
+            0.0176, 0.0683, 0.240, 0.602, 1.09, 1.51, 1.79, 2.14, 2.56, 2.77, 
+            2.96, 3.13, 3.29
+        ]
+        self._interp_pertes_fer = interp1d(bdata, pdata)
             
         # Affectation du matériau
         femm.mi_addblocklabel(self.largeur/2-self.l_dent/4, 0)
         femm.mi_selectlabel(self.largeur/2-self.l_dent/4, 0)
         femm.mi_setblockprop('Iron', 0, 1, '<None>', 0, 0, 0)
         femm.mi_clearselected()
-        
-        
+         
     def conditions_limites(self):
         """Méthode permettant d'attribuer les conditions aux limites"""
         
@@ -218,8 +223,7 @@ class Inductance:
         femm.mi_selectsegment(-self.largeur/2, 0)      
         femm.mi_setsegmentprop('lim', 0, 1, 0, 0)
         femm.mi_clearselected();
-        
-        
+           
     def sauvegarde_simulation(self):
         """Sauvegarde de la simulation (à faire avant de simuler)"""
         
@@ -236,7 +240,8 @@ class Inductance:
         femm.mi_analyze()
         femm.mi_loadsolution()
      
-    def calcul_energie(self):
+    @property
+    def energie_stockee(self):
         """Calcul de l'energie dans l'entrefer et le fer"""
         
         femm.mo_selectblock(0, 0) # On selectionne l'entrefer
@@ -244,22 +249,25 @@ class Inductance:
         energie = femm.mo_blockintegral(2)*self.l_active # 2 : Magnetic field energy
         femm.mo_clearblock()
         return energie
-        
-    def calcul_volume_externe(self):
+
+    @property 
+    def volume_externe(self):
         """Calcul du volume de l'inductance"""
         
         return self.l_active*self.hauteur*self.largeur
     
-    def calcul_volume_fer(self):
+    @property
+    def volume_fer(self):
         """Calcul du volume de fer de l'inductance"""
         
-        v_fer = (self.calcul_volume_externe()-
-                 self.calcul_volume_cuivre()-
+        v_fer = (self.volume_externe-
+                 self.volume_cuivre-
                  self.entrefer*self.l_dent*self.l_active)
         
         return v_fer
     
-    def calcul_volume_cuivre(self):
+    @property
+    def volume_cuivre(self):
         """Calcul du volume de cuivre de l'inductance"""
         
         v_cuivre = 2*(self.hauteur/2-
@@ -268,63 +276,47 @@ class Inductance:
         
         return v_cuivre
     
-    def calcul_masse_fer(self):
+    @property
+    def masse_fer(self):
         """Calcul de la masse de fer de l'inductance"""
         
         RHO_FER = 7874
         
-        m_fer = RHO_FER*self.calcul_volume_fer()
+        m_fer = RHO_FER*self.volume_fer
         
         return m_fer
     
-    def calcul_masse_cuivre(self):
+    @property
+    def masse_cuivre(self):
         """Calcul de la masse de cuivre de l'inductance"""
         
         RHO_CUIVRE = 8960
         
-        m_cuivre = RHO_CUIVRE*self.calcul_volume_cuivre()
+        m_cuivre = RHO_CUIVRE*self.volume_cuivre
         
         return m_cuivre
     
-    def calcul_pertes_joule(self):
+    @property
+    def masse_totale(self):
+        """ Calcul de la masse totale dans le transformateur """
+        
+        return self.masse_cuivre + self.masse_fer
+    
+    @property
+    def pertes_joule(self):
         """Calcul des pertes cuivre de l'inductance"""
         
         SIGMA_CUIVRE = 59.6e6
         
         pertes_joule = (1/SIGMA_CUIVRE*
                         self.k_b*
-                        self.calcul_volume_cuivre()*
+                        self.volume_cuivre*
                         self.j_max**2)
         
         return pertes_joule
-    
-    # def calcul_pertes_fer(self):
-    #     """Calcul des pertes fer de l'inductance"""
-        
-    #     FREQUENCE = 50
-        
-    #     # Coefficients des pertes fer : 
-    #     # Pertes volumique = ALPHA*B**1.5*FREQUENCE**1.5+
-    #     #                    BETA*B**2*FREQUENCE+
-    #     #                    GAMMA*B**2*FREQUENCE**2
-    #     ALPHA = 1.1119e-4
-    #     BETA = 1.688e-4
-    #     GAMMA = 4.361e-4
-        
-    #     # Mesure du Bx, By au milieu de la dent centrale
-    #     b_x, b_y = femm.mo_getb(0, self.hauteur/4)
-        
-    #     b_moy = np.sqrt(b_x**2 + b_y**2)
-        
-    #     pertes_fer_masse = (ALPHA*b_moy**1.5*FREQUENCE**1.5+
-    #                          BETA*b_moy**2*FREQUENCE+
-    #                          GAMMA*b_moy**2*FREQUENCE**2)
-        
-    #     pertes_fer = pertes_fer_masse*self.calcul_masse_fer()
 
-    #     return pertes_fer
-
-    def calcul_pertes_fer(self):
+    @property
+    def pertes_fer(self):
         """ Calcul des pertes fer de l'inductance """
 
         FREQUENCE = 50 # (en Hz)
@@ -335,7 +327,8 @@ class Inductance:
         # TODO : faire la moyenne de Bx et By sur tout le volume
         # plutôt que juste dans la dent ?
 
-    
+        return self._interp_pertes_fer(b_moy)
+
     def fit_zoom(self):
         """Méthode permettant de générer la géométrie""" 
 
