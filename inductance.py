@@ -61,28 +61,28 @@ class Inductance:
                 
     @property
     def densite_courant(self):
-        """ Getter permettant d'obtenir la veleur de j_max """
+        """ Getter permettant d'obtenir la valeur de j_max """
         
         return self.j_max
     
     @densite_courant.setter
     def densite_courant(self, j_max):
-        """ Setter permettant de modifier la veleur de j_max """
+        """ Setter permettant de modifier la valeur de j_max """
         
         self.j_max = j_max
         
-    def creation_FEMM(self):
+    def creation_FEMM(self, display=False):
         """Méthode permettant de générer une simulation FEMM"""
         
         # Permet de lancer le logiciel FEMM. (1 = pas d'affichage graphique)
-        femm.openfemm(1)
+        femm.openfemm(int(not(display)))
 
         # Création d'un problème de magnétostatique ( = 0 ).
         femm.newdocument(0)
 
         # Définition du problème.  Magnetostatique, Unités mètres, Problème plan, 
         # Precision de 10^(-8), longueur active de 1m, angle de contraintes de 30deg
-        femm.mi_probdef(0,'meters','planar',1e-8,1,30)
+        femm.mi_probdef(50,'meters','planar',1e-8,1,30)
         
     def creation_geometrie(self):
         """Méthode permettant de générer la géométrie"""       
@@ -205,7 +205,12 @@ class Inductance:
             0.0176, 0.0683, 0.240, 0.602, 1.09, 1.51, 1.79, 2.14, 2.56, 2.77, 
             2.96, 3.13, 3.29
         ]
-        self._interp_pertes_fer = interp1d(bdata, pdata)
+        self._interp_pertes_fer = interp1d(
+            bdata, 
+            pdata, 
+            bounds_error=False,
+            fill_value=(pdata[0], pdata[-1])
+        )
             
         # Affectation du matériau
         femm.mi_addblocklabel(self.largeur/2-self.l_dent/4, 0)
